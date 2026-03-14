@@ -9,40 +9,29 @@ exports.handler = async function(event, context) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Playlist ID is required' }) };
   }
 
-  // URL για τα βίντεο της playlist
   const itemsUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=${maxResults}&key=${apiKey}`;
-  
-  // URL για τις πληροφορίες της ίδιας της playlist (για να πάρουμε τον τίτλο )
-  const playlistUrl = `https://www.googleapis.com/youtube/v3/playlists?part=snippet&id=${playlistId}&key=${apiKey}`;
 
   try {
-    // Εκτελούμε τις δύο κλήσεις ταυτόχρονα για ταχύτητα
-    const [itemsResponse, playlistResponse] = await Promise.all([
-      fetch(itemsUrl ),
-      fetch(playlistUrl)
-    ]);
 
+    const itemsResponse = await fetch(itemsUrl);
     const itemsData = await itemsResponse.json();
-    const playlistData = await playlistResponse.json();
 
-    // Έλεγχος για σφάλματα σε οποιαδήποτε από τις δύο κλήσεις
-    if (itemsData.error || playlistData.error) {
-      const error = itemsData.error || playlistData.error;
-      console.error('YouTube API Error:', error);
-      return { statusCode: error.code || 500, body: JSON.stringify({ error: error.message }) };
+    if (itemsData.error) {
+      console.error('YouTube API Error:', itemsData.error);
+      return { statusCode: itemsData.error.code || 500, body: JSON.stringify({ error: itemsData.error.message }) };
     }
 
-    // Παίρνουμε τον τίτλο από τη δεύτερη κλήση
-    const playlistTitle = playlistData.items.length > 0 ? playlistData.items[0].snippet.title : "Άγνωστη Playlist";
+    // Παίρνουμε τίτλο playlist από το πρώτο item
+    const playlistTitle = itemsData.items?.[0]?.snippet?.playlistTitle || "Άγνωστη Playlist";
 
-    // Φτιάχνουμε τη λίστα με τα βίντεο από την πρώτη κλήση
     const videoItems = itemsData.items.map(item => ({
       videoId: item.snippet.resourceId.videoId,
       title: item.snippet.title,
-      thumbnail: item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : `https://img.youtube.com/vi/${item.snippet.resourceId.videoId}/mqdefault.jpg`
-    } ));
+      thumbnail: item.snippet.thumbnails.medium
+        ? item.snippet.thumbnails.medium.url
+        : `https://img.youtube.com/vi/${item.snippet.resourceId.videoId}/mqdefault.jpg`
+    }));
 
-    // Συνδυάζουμε τα πάντα σε ένα αντικείμενο
     const responsePayload = {
       playlistTitle: playlistTitle,
       items: videoItems
