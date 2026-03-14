@@ -1,67 +1,88 @@
-exports.handler = async (event) => {
+// youtube.js
+const fetch = require('node-fetch');
 
-const headers = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type",
-  "Access-Control-Allow-Methods": "GET, OPTIONS"
-};
+exports.handler = async (event, context) => {
+  const { action, playlistId } = event.queryStringParameters || {};
 
-if (event.httpMethod === "OPTIONS") {
-  return {
-    statusCode: 200,
-    headers
-  };
-}
+  // Βασικός έλεγχος action
+  if (!action) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "Missing action parameter" }),
+    };
+  }
 
-const playlistId = event.queryStringParameters.playlistId;
-const action = event.queryStringParameters.action;
+  if (!playlistId) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "Missing playlistId parameter" }),
+    };
+  }
 
-if (!playlistId) {
-  return {
-    statusCode: 400,
-    headers,
-    body: JSON.stringify({ error: "Missing playlistId" })
-  };
-}
+  // YouTube API Key από Netlify Environment Variable
+  const API_KEY = process.env.YOUTUBE_API_KEY;
+  if (!API_KEY) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "Missing YOUTUBE_API_KEY" }),
+    };
+  }
 
-try {
+  try {
+    if (action === "getPlaylistTitle") {
+      // Παίρνει μόνο τον τίτλο της playlist
+      const url = `https://www.googleapis.com/youtube/v3/playlists?part=snippet&id=${playlistId}&key=${API_KEY}`;
+      const res = await fetch(url);
+      const data = await res.json();
 
-if (action === "getPlaylistTitle") {
+      if (!data.items || data.items.length === 0) {
+        return { statusCode: 404, body: JSON.stringify({ error: "Playlist not found" }) };
+      }
 
-const url = `https://www.youtube.com/feeds/videos.xml?playlist_id=${playlistId}`;
-const res = await fetch(url);
-const text = await res.text();
+      const title = data.items[0].snippet.title;
+      return {
+        statusCode: 200,
+        headers: {
+          "Access-Control-Allow-Origin": "*", // CORS fix
+        },
+        body: JSON.stringify({ title }),
+      };
+    }
 
-const match = text.match(/<title>(.*?)<\/title>/);
+    if (action === "getPlaylistVideos") {
+      // Παίρνει μέχρι 50 βίντεο της playlist
+      const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${playlistId}&key=${API_KEY}`;
+      const res = await fetch(url);
+      const data = await res.json();
 
-let title = "YouTube Playlist";
+      if (!data.items) {
+        return { statusCode: 404, body: JSON.stringify({ error: "Videos not found" }) };
+      }
 
-if (match && match[1]) {
-  title = match[1];
-}
+      const videos = data.items.map(item => ({
+        videoId: item.snippet.resourceId.videoId,
+        title: item.snippet.title,
+        thumbnail: item.snippet.thumbnails?.medium?.url || "",
+      }));
 
-return {
-  statusCode: 200,
-  headers,
-  body: JSON.stringify({ title })
-};
+      return {
+        statusCode: 200,
+        headers: {
+          "Access-Control-Allow-Origin": "*", // CORS fix
+        },
+        body: JSON.stringify({ videos }),
+      };
+    }
 
-}
-
-return {
-  statusCode: 400,
-  headers,
-  body: JSON.stringify({ error: "Invalid action" })
-};
-
-} catch (err) {
-
-return {
-  statusCode: 500,
-  headers,
-  body: JSON.stringify({ error: err.message })
-};
-
-}
-
+    // Άγνωστο action
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "Invalid action" }),
+    };
+  } catch (err) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: err.message }),
+    };
+  }
 };
