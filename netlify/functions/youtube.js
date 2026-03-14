@@ -1,72 +1,67 @@
-const fetch = require("node-fetch");
-
 exports.handler = async (event) => {
 
-  const API_KEY = process.env.YOUTUBE_API_KEY;
+const headers = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Methods": "GET, OPTIONS"
+};
 
-  const action = event.queryStringParameters.action;
-  const playlistId = event.queryStringParameters.playlistId;
+if (event.httpMethod === "OPTIONS") {
+  return {
+    statusCode: 200,
+    headers
+  };
+}
 
-  try {
+const playlistId = event.queryStringParameters.playlistId;
+const action = event.queryStringParameters.action;
 
-    // ===============================
-    // GET PLAYLIST TITLE
-    // ===============================
-    if (action === "getPlaylistTitle") {
+if (!playlistId) {
+  return {
+    statusCode: 400,
+    headers,
+    body: JSON.stringify({ error: "Missing playlistId" })
+  };
+}
 
-      const url = `https://www.googleapis.com/youtube/v3/playlists?part=snippet&id=${playlistId}&key=${API_KEY}`;
+try {
 
-      const response = await fetch(url);
-      const data = await response.json();
+if (action === "getPlaylistTitle") {
 
-      const title =
-        data.items &&
-        data.items.length > 0
-          ? data.items[0].snippet.title
-          : "Άγνωστη Playlist";
+const url = `https://www.youtube.com/feeds/videos.xml?playlist_id=${playlistId}`;
+const res = await fetch(url);
+const text = await res.text();
 
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ title })
-      };
-    }
+const match = text.match(/<title>(.*?)<\/title>/);
 
-    // ===============================
-    // GET PLAYLIST VIDEOS
-    // ===============================
-    if (action === "getPlaylist") {
+let title = "YouTube Playlist";
 
-      const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${playlistId}&key=${API_KEY}`;
+if (match && match[1]) {
+  title = match[1];
+}
 
-      const response = await fetch(url);
-      const data = await response.json();
+return {
+  statusCode: 200,
+  headers,
+  body: JSON.stringify({ title })
+};
 
-      const songs = data.items.map(item => ({
-        title: item.snippet.title,
-        videoId: item.snippet.resourceId.videoId,
-        thumbnail: item.snippet.thumbnails.medium.url
-      }));
+}
 
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          playlistTitle: data.items[0].snippet.channelTitle,
-          songs
-        })
-      };
-    }
+return {
+  statusCode: 400,
+  headers,
+  body: JSON.stringify({ error: "Invalid action" })
+};
 
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: "Invalid action" })
-    };
+} catch (err) {
 
-  } catch (error) {
+return {
+  statusCode: 500,
+  headers,
+  body: JSON.stringify({ error: err.message })
+};
 
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message })
-    };
+}
 
-  }
 };
