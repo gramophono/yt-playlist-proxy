@@ -1,61 +1,72 @@
-const fetch = require('node-fetch');
+const fetch = require("node-fetch");
 
-exports.handler = async function(event, context) {
-  const playlistId = event.queryStringParameters.id;
-  const apiKey = process.env.YOUTUBE_API_KEY;
-  const maxResults = 50;
+exports.handler = async (event) => {
 
-  if (!playlistId) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Playlist ID is required' }) };
-  }
+  const API_KEY = process.env.YOUTUBE_API_KEY;
 
-  // URL για τα βίντεο της playlist
-  const itemsUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=${maxResults}&key=${apiKey}`;
-  
-  // URL για τις πληροφορίες της ίδιας της playlist (για να πάρουμε τον τίτλο )
-  const playlistUrl = `https://www.googleapis.com/youtube/v3/playlists?part=snippet&id=${playlistId}&key=${apiKey}`;
+  const action = event.queryStringParameters.action;
+  const playlistId = event.queryStringParameters.playlistId;
 
   try {
-    // Εκτελούμε τις δύο κλήσεις ταυτόχρονα για ταχύτητα
-    const [itemsResponse, playlistResponse] = await Promise.all([
-      fetch(itemsUrl ),
-      fetch(playlistUrl)
-    ]);
 
-    const itemsData = await itemsResponse.json();
-    const playlistData = await playlistResponse.json();
+    // ===============================
+    // GET PLAYLIST TITLE
+    // ===============================
+    if (action === "getPlaylistTitle") {
 
-    // Έλεγχος για σφάλματα σε οποιαδήποτε από τις δύο κλήσεις
-    if (itemsData.error || playlistData.error) {
-      const error = itemsData.error || playlistData.error;
-      console.error('YouTube API Error:', error);
-      return { statusCode: error.code || 500, body: JSON.stringify({ error: error.message }) };
+      const url = `https://www.googleapis.com/youtube/v3/playlists?part=snippet&id=${playlistId}&key=${API_KEY}`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      const title =
+        data.items &&
+        data.items.length > 0
+          ? data.items[0].snippet.title
+          : "Άγνωστη Playlist";
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ title })
+      };
     }
 
-    // Παίρνουμε τον τίτλο από τη δεύτερη κλήση
-    const playlistTitle = playlistData.items.length > 0 ? playlistData.items[0].snippet.title : "Άγνωστη Playlist";
+    // ===============================
+    // GET PLAYLIST VIDEOS
+    // ===============================
+    if (action === "getPlaylist") {
 
-    // Φτιάχνουμε τη λίστα με τα βίντεο από την πρώτη κλήση
-    const videoItems = itemsData.items.map(item => ({
-      videoId: item.snippet.resourceId.videoId,
-      title: item.snippet.title,
-      thumbnail: item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : `https://img.youtube.com/vi/${item.snippet.resourceId.videoId}/mqdefault.jpg`
-    } ));
+      const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${playlistId}&key=${API_KEY}`;
 
-    // Συνδυάζουμε τα πάντα σε ένα αντικείμενο
-    const responsePayload = {
-      playlistTitle: playlistTitle,
-      items: videoItems
-    };
+      const response = await fetch(url);
+      const data = await response.json();
+
+      const songs = data.items.map(item => ({
+        title: item.snippet.title,
+        videoId: item.snippet.resourceId.videoId,
+        thumbnail: item.snippet.thumbnails.medium.url
+      }));
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          playlistTitle: data.items[0].snippet.channelTitle,
+          songs
+        })
+      };
+    }
 
     return {
-      statusCode: 200,
-      headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify(responsePayload),
+      statusCode: 400,
+      body: JSON.stringify({ error: "Invalid action" })
     };
 
   } catch (error) {
-    console.error('Server Error:', error);
-    return { statusCode: 500, body: JSON.stringify({ error: 'Failed to fetch playlist' }) };
+
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: error.message })
+    };
+
   }
 };
