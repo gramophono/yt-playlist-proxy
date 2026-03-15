@@ -29,7 +29,7 @@ exports.handler = async (event) => {
     }
 
     // YouTube API key - ΒΑΛΕ ΤΟ ΔΙΚΟ ΣΟΥ API KEY ΕΔΩ
-    const YOUTUBE_API_KEY = 'AIzaSyC52fEfReuH9qYi0uPN6A2UyBm_Dg0d-6E';
+    const YOUTUBE_API_KEY = '';
 
     if (action === 'getPlaylistTitle') {
       // Fetch playlist details
